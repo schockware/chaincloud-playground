@@ -1,0 +1,15 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.4.3">
+
+  <ItemGroup>
+    <ProjectReference Include="..\WeatherPlaylist.Api\WeatherPlaylist.Api.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>a7b463af-2e64-47a7-a527-f93956f5b9e0</UserSecretsId>
+  </PropertyGroup>
+
+</Project>
