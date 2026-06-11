@@ -1,0 +1,413 @@
+openapi: 3.1.0
+
+info:
+  title: Weather Playlist — Public API
+  description: |
+    Served by the .NET Aspire service. Fetches current weather from OpenWeatherMap,
+    delegates Spotify playlist creation to the playlist-engine (Go), and returns a
+    combined response for the UI to render.
+  version: 0.2.0
+  contact:
+    url: https://github.com/schockware/chaincloud-playground
+
+servers:
+  - url: http://localhost:5000
+    description: Local Aspire dev
+
+tags:
+  - name: weather
+    description: Current conditions from OpenWeatherMap
+  - name: playlist
+    description: Weather-driven Spotify playlist orchestration
+
+paths:
+
+  /weather:
+    get:
+      operationId: getWeather
+      tags: [weather]
+      summary: Current weather for a coordinate
+      parameters:
+        - $ref: '#/components/parameters/Lat'
+        - $ref: '#/components/parameters/Lon'
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+        - $ref: '#/components/parameters/ExperimentIdHeader'
+      responses:
+        '200':
+          description: Current conditions
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            X-Experiment-Id:
+              $ref: '#/components/headers/ExperimentId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeatherCondition'
+              example:
+                condition: rain
+                temp_celsius: 11.4
+                feels_like_celsius: 9.1
+                humidity: 83
+                wind_speed_mps: 5.2
+                description: light rain
+                time_of_day: afternoon
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+
+  /playlist/generate:
+    post:
+      operationId: generatePlaylist
+      tags: [playlist]
+      summary: Generate a Spotify playlist driven by current weather
+      description: |
+        Fetches weather for the supplied coordinates, calls the playlist-engine
+        to map conditions to a Spotify playlist, then returns the combined result
+        ready for the UI embed.
+
+        On error responses from the playlist-engine, this service passes the status
+        code through directly and adds `X-Api-Source: GO-API-PASSTHROUGH` to the
+        response so callers can identify the origin of the failure.
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+        - $ref: '#/components/parameters/ExperimentIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeneratePlaylistRequest'
+            example:
+              lat: 51.5074
+              lon: -0.1278
+              location_label: London
+              experiment_id: EXP-001
+      responses:
+        '200':
+          description: Playlist generated
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            X-Experiment-Id:
+              $ref: '#/components/headers/ExperimentId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaylistResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Liveness probe
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+components:
+
+  parameters:
+    Lat:
+      name: lat
+      in: query
+      required: true
+      description: Latitude (decimal degrees, WGS84)
+      schema:
+        type: number
+        format: double
+        minimum: -90
+        maximum: 90
+      example: 51.5074
+    Lon:
+      name: lon
+      in: query
+      required: true
+      description: Longitude (decimal degrees, WGS84)
+      schema:
+        type: number
+        format: double
+        minimum: -180
+        maximum: 180
+      example: -0.1278
+    CorrelationIdHeader:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: |
+        Caller-supplied correlation ID. If absent, the .NET service generates a new UUID
+        and uses it for the lifetime of the request, including the downstream call to
+        the playlist-engine. Echoed back on all responses.
+      schema:
+        type: string
+        format: uuid
+    ExperimentIdHeader:
+      name: X-Experiment-Id
+      in: header
+      required: false
+      description: |
+        References an experiment manifest in specs/experiments/. Echoed back on all
+        responses. Used to correlate k6 stress test runs to specific CVE experiments.
+      schema:
+        type: string
+        example: EXP-001
+
+  headers:
+    CorrelationId:
+      description: The correlation ID for this request, generated by this service if not supplied by the caller.
+      schema:
+        type: string
+        format: uuid
+    ExperimentId:
+      description: Echoed from the X-Experiment-Id request header, if present.
+      schema:
+        type: string
+    ApiSource:
+      description: Present on passthrough error responses. Value is GO-API-PASSTHROUGH when the error originated in the playlist-engine.
+      schema:
+        type: string
+        enum: [GO-API-PASSTHROUGH]
+
+  schemas:
+
+    GeneratePlaylistRequest:
+      type: object
+      required: [lat, lon]
+      properties:
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        lon:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        location_label:
+          type: string
+          description: Human-readable location name for the playlist title (optional)
+          example: London
+        experiment_id:
+          type: string
+          description: |
+            References a manifest in specs/experiments/. Carried through to the
+            playlist-engine and echoed in the response body and X-Experiment-Id header.
+          example: EXP-001
+
+    WeatherCondition:
+      type: object
+      required:
+        - condition
+        - temp_celsius
+        - feels_like_celsius
+        - humidity
+        - wind_speed_mps
+        - description
+        - time_of_day
+      properties:
+        condition:
+          type: string
+          enum: [clear, clouds, rain, drizzle, thunderstorm, snow, mist, fog, haze]
+          description: Normalised OpenWeatherMap main condition code
+        temp_celsius:
+          type: number
+          format: double
+        feels_like_celsius:
+          type: number
+          format: double
+        humidity:
+          type: integer
+          minimum: 0
+          maximum: 100
+        wind_speed_mps:
+          type: number
+          format: double
+        description:
+          type: string
+          description: Verbatim OpenWeatherMap description
+          example: light rain
+        time_of_day:
+          type: string
+          enum: [morning, afternoon, evening, night]
+          description: Derived from UTC offset at coordinates
+
+    PlaylistRecipe:
+      description: Mood and audio parameters returned by the playlist-engine
+      type: object
+      required:
+        - mood
+        - genres
+        - tempo_range
+        - energy_level
+        - valence
+        - track_count
+      properties:
+        mood:
+          type: string
+          enum: [happy, melancholic, energetic, calm, dramatic, cozy, upbeat, dark]
+        genres:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          example: [indie pop, acoustic]
+        tempo_range:
+          type: object
+          required: [min_bpm, max_bpm]
+          properties:
+            min_bpm:
+              type: integer
+              minimum: 40
+            max_bpm:
+              type: integer
+              maximum: 220
+        energy_level:
+          type: number
+          format: double
+          minimum: 0.0
+          maximum: 1.0
+          description: Maps to Spotify audio feature 'energy'
+        valence:
+          type: number
+          format: double
+          minimum: 0.0
+          maximum: 1.0
+          description: Maps to Spotify audio feature 'valence' (musical positivity)
+        track_count:
+          type: integer
+          minimum: 5
+          maximum: 30
+
+    PlaylistResponse:
+      type: object
+      required:
+        - playlist_id
+        - spotify_embed_url
+        - playlist_name
+        - weather_snapshot
+        - recipe
+        - created_at
+      properties:
+        playlist_id:
+          type: string
+          description: Spotify playlist ID
+          example: 37i9dQZF1DXcBWIGoYBM5M
+        spotify_embed_url:
+          type: string
+          format: uri
+          description: Ready-to-use Spotify iframe embed URL
+          example: https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M
+        playlist_name:
+          type: string
+          example: Rainy Tuesday in London
+        weather_snapshot:
+          $ref: '#/components/schemas/WeatherCondition'
+        recipe:
+          $ref: '#/components/schemas/PlaylistRecipe'
+        experiment_id:
+          type: string
+          description: Echoed from the request, if supplied.
+          example: EXP-001
+        created_at:
+          type: string
+          format: date-time
+
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        upstream_weather:
+          type: string
+          enum: [ok, unreachable]
+        upstream_playlist_engine:
+          type: string
+          enum: [ok, unreachable]
+
+    ProblemDetails:
+      description: RFC 9457 problem details
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri
+        correlation_id:
+          type: string
+          format: uuid
+          description: Echoed from X-Correlation-Id for log correlation on errors.
+        experiment_id:
+          type: string
+          description: Echoed from X-Experiment-Id, if present.
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    RateLimited:
+      description: Spotify rate limit hit (passed through from playlist-engine)
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+        X-Experiment-Id:
+          $ref: '#/components/headers/ExperimentId'
+        X-Api-Source:
+          $ref: '#/components/headers/ApiSource'
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait before retrying
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    NotFound:
+      description: Resource not found
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    UpstreamError:
+      description: Upstream dependency returned an error. X-Api-Source identifies the origin.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+        X-Experiment-Id:
+          $ref: '#/components/headers/ExperimentId'
+        X-Api-Source:
+          $ref: '#/components/headers/ApiSource'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
