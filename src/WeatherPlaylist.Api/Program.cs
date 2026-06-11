@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using WeatherPlaylist.Api;
@@ -11,8 +12,12 @@ builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(opts =>
     opts.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower);
 
+var owmBaseUrl = builder.Configuration["OWM_BASE_URL"] ?? "https://api.openweathermap.org";
+var owmCaFile = builder.Configuration["OWM_TLS_CA_FILE"];
+
 builder.Services.AddHttpClient("openweathermap",
-    client => client.BaseAddress = new Uri("https://api.openweathermap.org"));
+    client => client.BaseAddress = new Uri(owmBaseUrl))
+    .ConfigurePrimaryHttpMessageHandler(() => BuildHttpHandler(owmCaFile));
 
 builder.Services.AddHttpClient("playlist-engine",
     client => client.BaseAddress = new Uri("http://playlist-engine"));
@@ -32,13 +37,11 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
-// Aspire liveness probe (separate from our application /health endpoint)
 app.MapHealthChecks("/alive", new HealthCheckOptions
 {
     Predicate = r => r.Tags.Contains("live")
 });
 
-// Generate or inherit X-Correlation-Id; echo it and X-Experiment-Id on every response
 app.Use(async (ctx, next) =>
 {
     var correlationId = ctx.Request.Headers["X-Correlation-Id"].FirstOrDefault()
@@ -54,8 +57,13 @@ app.Use(async (ctx, next) =>
         ctx.Response.Headers["X-Correlation-Id"] = correlationId;
         if (!string.IsNullOrEmpty(experimentId))
             ctx.Response.Headers["X-Experiment-Id"] = experimentId;
-        if (useMockWeather)
-            ctx.Response.Headers["X-ARBITRARY-MOCK"] = "weather";
+
+        var mockParts = new List<string>();
+        if (useMockWeather) mockParts.Add("weather");
+        if (ctx.Items.ContainsKey("SpotifyMocked")) mockParts.Add("spotify");
+        if (mockParts.Count > 0)
+            ctx.Response.Headers["X-ARBITRARY-MOCK"] = string.Join(",", mockParts);
+
         return Task.CompletedTask;
     });
 
@@ -67,3 +75,20 @@ app.MapPlaylistEndpoints();
 app.MapHealthEndpoints();
 
 app.Run();
+
+static HttpClientHandler BuildHttpHandler(string? caFile)
+{
+    var handler = new HttpClientHandler();
+    if (string.IsNullOrWhiteSpace(caFile)) return handler;
+
+    var caCert = X509CertificateLoader.LoadCertificateFromFile(caFile);
+    handler.ServerCertificateCustomValidationCallback = (_, cert, chain, _) =>
+    {
+        if (chain is null || cert is null) return false;
+        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        chain.ChainPolicy.CustomTrustStore.Add(caCert);
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+        return chain.Build(cert);
+    };
+    return handler;
+}

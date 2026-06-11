@@ -1,6 +1,9 @@
 # Local secrets
 .env
 
+# Generated cert private keys (public *.crt files ARE committed)
+containers/certs/*.key
+
 # Session state (ephemeral, not for version control)
 SESSION.md
 

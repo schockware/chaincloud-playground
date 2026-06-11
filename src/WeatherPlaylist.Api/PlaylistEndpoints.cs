@@ -57,8 +57,16 @@ public static class PlaylistEndpoints
             return;
         }
 
+        var arbitraryMockHeader = ctx.Request.Headers["X-ARBITRARY-MOCK"].FirstOrDefault();
+
         var goResp = await engineClient.GenerateAsync(
-            weather, req.LocationLabel, req.ExperimentId, correlationId, ct);
+            weather, req.LocationLabel, req.ExperimentId, correlationId, arbitraryMockHeader, ct);
+
+        if (goResp.Headers.TryGetValues("X-ARBITRARY-MOCK", out var goMockVals)
+            && string.Join(",", goMockVals).Contains("spotify"))
+        {
+            ctx.Items["SpotifyMocked"] = true;
+        }
 
         if (!goResp.IsSuccessStatusCode)
         {

@@ -13,13 +13,20 @@ func main() {
 	clientID := os.Getenv("SPOTIFY_CLIENT_ID")
 	clientSecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
 	refreshToken := os.Getenv("SPOTIFY_REFRESH_TOKEN")
+	caFile := os.Getenv("SPOTIFY_TLS_CA_FILE")
+	mockBaseURL := os.Getenv("SPOTIFY_MOCK_BASE_URL")
 
 	if clientID == "" || clientSecret == "" || refreshToken == "" {
 		slog.Warn("Spotify credentials not fully configured; /playlist/generate will return 401")
 	}
 
 	app := &handlers.App{
-		Spotify: spotify.New(clientID, clientSecret, refreshToken),
+		Spotify: spotify.New(clientID, clientSecret, refreshToken, "", caFile),
+	}
+
+	if mockBaseURL != "" {
+		app.SpotifyMock = spotify.New(clientID, clientSecret, refreshToken, mockBaseURL, caFile)
+		slog.Info("Spotify mock server configured", "url", mockBaseURL)
 	}
 
 	mux := http.NewServeMux()

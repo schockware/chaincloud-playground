@@ -7,6 +7,7 @@ public class PlaylistEngineClient(IHttpClientFactory httpClientFactory)
         string? locationLabel,
         string? experimentId,
         string correlationId,
+        string? arbitraryMockHeader = null,
         CancellationToken ct = default)
     {
         var client = httpClientFactory.CreateClient("playlist-engine");
@@ -34,6 +35,8 @@ public class PlaylistEngineClient(IHttpClientFactory httpClientFactory)
         req.Headers.TryAddWithoutValidation("X-Correlation-Id", correlationId);
         if (!string.IsNullOrEmpty(experimentId))
             req.Headers.TryAddWithoutValidation("X-Experiment-Id", experimentId);
+        if (!string.IsNullOrEmpty(arbitraryMockHeader))
+            req.Headers.TryAddWithoutValidation("X-ARBITRARY-MOCK", arbitraryMockHeader);
 
         return await client.SendAsync(req, HttpCompletionOption.ResponseContentRead, ct);
     }

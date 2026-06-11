@@ -3,35 +3,70 @@ package spotify
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
 )
 
-const apiBase = "https://api.spotify.com/v1"
-
 type Client struct {
-	http          *http.Client
-	clientID      string
-	clientSecret  string
-	refreshToken  string
-	mu            sync.Mutex
-	accessToken   string
+	http           *http.Client
+	clientID       string
+	clientSecret   string
+	refreshToken   string
+	apiBase        string
+	tokenURL       string
+	mu             sync.Mutex
+	accessToken    string
 	tokenExpiresAt time.Time
 }
 
-func New(clientID, clientSecret, refreshToken string) *Client {
+func New(clientID, clientSecret, refreshToken, mockBaseURL, caFile string) *Client {
+	apiBase := "https://api.spotify.com/v1"
+	tokenURL := "https://accounts.spotify.com/api/token"
+	if mockBaseURL != "" {
+		apiBase = mockBaseURL + "/v1"
+		tokenURL = mockBaseURL + "/api/token"
+	}
 	return &Client{
-		http:         &http.Client{Timeout: 15 * time.Second},
+		http:         buildHTTPClient(caFile),
 		clientID:     clientID,
 		clientSecret: clientSecret,
 		refreshToken: refreshToken,
+		apiBase:      apiBase,
+		tokenURL:     tokenURL,
 	}
+}
+
+func buildHTTPClient(caFile string) *http.Client {
+	if caFile == "" {
+		return &http.Client{Timeout: 15 * time.Second}
+	}
+	pem, err := os.ReadFile(caFile)
+	if err != nil {
+		slog.Warn("could not read Spotify TLS CA file, using system pool", "file", caFile, "err", err)
+		return &http.Client{Timeout: 15 * time.Second}
+	}
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM(pem)
+	return &http.Client{
+		Timeout: 15 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{RootCAs: pool},
+		},
+	}
+}
+
+func (c *Client) HasCredentials() bool {
+	return c.clientID != "" && c.clientSecret != "" && c.refreshToken != ""
 }
 
 func (c *Client) Token(ctx context.Context) (string, error) {
@@ -47,8 +82,7 @@ func (c *Client) Token(ctx context.Context) (string, error) {
 		"refresh_token": {c.refreshToken},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"https://accounts.spotify.com/api/token",
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.tokenURL,
 		strings.NewReader(data.Encode()))
 	if err != nil {
 		return "", err
@@ -82,7 +116,7 @@ func (c *Client) Token(ctx context.Context) (string, error) {
 }
 
 func (c *Client) CurrentUserID(ctx context.Context, token string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiBase+"/me", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.apiBase+"/me", nil)
 	if err != nil {
 		return "", err
 	}
@@ -108,7 +142,7 @@ func (c *Client) CurrentUserID(ctx context.Context, token string) (string, error
 func (c *Client) SearchTracks(ctx context.Context, token string, genres []string, limit int) ([]string, error) {
 	q := "genre:" + strings.Join(genres, " genre:")
 	u := fmt.Sprintf("%s/search?q=%s&type=track&limit=%d&market=US",
-		apiBase, url.QueryEscape(q), limit)
+		c.apiBase, url.QueryEscape(q), limit)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -148,7 +182,7 @@ func (c *Client) CreatePlaylist(ctx context.Context, token, userID, name, descri
 		Public:      false,
 	})
 
-	u := fmt.Sprintf("%s/users/%s/playlists", apiBase, userID)
+	u := fmt.Sprintf("%s/users/%s/playlists", c.apiBase, userID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
 	if err != nil {
 		return "", err
@@ -176,7 +210,7 @@ func (c *Client) CreatePlaylist(ctx context.Context, token, userID, name, descri
 func (c *Client) AddTracks(ctx context.Context, token, playlistID string, uris []string) error {
 	body, _ := json.Marshal(addTracksRequest{URIs: uris})
 
-	u := fmt.Sprintf("%s/playlists/%s/tracks", apiBase, playlistID)
+	u := fmt.Sprintf("%s/playlists/%s/tracks", c.apiBase, playlistID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -194,10 +228,6 @@ func (c *Client) AddTracks(ctx context.Context, token, playlistID string, uris [
 		return fmt.Errorf("add tracks returned %d", resp.StatusCode)
 	}
 	return nil
-}
-
-func (c *Client) HasCredentials() bool {
-	return c.clientID != "" && c.clientSecret != "" && c.refreshToken != ""
 }
 
 type RateLimitError struct {

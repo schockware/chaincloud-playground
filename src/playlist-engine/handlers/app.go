@@ -8,7 +8,8 @@ import (
 )
 
 type App struct {
-	Spotify *spotify.Client
+	Spotify     *spotify.Client
+	SpotifyMock *spotify.Client // nil when SPOTIFY_MOCK_BASE_URL is not set
 }
 
 func echoHeaders(w http.ResponseWriter, correlationID, experimentID string) {
