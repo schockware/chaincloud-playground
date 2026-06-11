@@ -6,7 +6,7 @@ info:
     Served by the .NET Aspire service. Fetches current weather from OpenWeatherMap,
     delegates Spotify playlist creation to the playlist-engine (Go), and returns a
     combined response for the UI to render.
-  version: 0.2.0
+  version: 0.3.0
   contact:
     url: https://github.com/schockware/chaincloud-playground
 
@@ -32,6 +32,7 @@ paths:
         - $ref: '#/components/parameters/Lon'
         - $ref: '#/components/parameters/CorrelationIdHeader'
         - $ref: '#/components/parameters/ExperimentIdHeader'
+        - $ref: '#/components/parameters/ArbitraryMockHeader'
       responses:
         '200':
           description: Current conditions
@@ -40,6 +41,8 @@ paths:
               $ref: '#/components/headers/CorrelationId'
             X-Experiment-Id:
               $ref: '#/components/headers/ExperimentId'
+            X-ARBITRARY-MOCK:
+              $ref: '#/components/headers/ArbitraryMock'
           content:
             application/json:
               schema:
@@ -73,6 +76,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/CorrelationIdHeader'
         - $ref: '#/components/parameters/ExperimentIdHeader'
+        - $ref: '#/components/parameters/ArbitraryMockHeader'
       requestBody:
         required: true
         content:
@@ -92,6 +96,8 @@ paths:
               $ref: '#/components/headers/CorrelationId'
             X-Experiment-Id:
               $ref: '#/components/headers/ExperimentId'
+            X-ARBITRARY-MOCK:
+              $ref: '#/components/headers/ArbitraryMock'
           content:
             application/json:
               schema:
@@ -161,6 +167,21 @@ components:
       schema:
         type: string
         example: EXP-001
+    ArbitraryMockHeader:
+      name: X-ARBITRARY-MOCK
+      in: header
+      required: false
+      description: |
+        Caller-supplied mock control. When set to 'spotify', this service passes the
+        header to the playlist-engine, which routes Spotify API calls for this request
+        to SPOTIFY_MOCK_BASE_URL instead of api.spotify.com. The HTTPS chain is
+        preserved — the TLS CVE surface still fires.
+
+        Has no effect if SPOTIFY_MOCK_BASE_URL is not configured in the environment.
+        See specs/mock-services.md for setup.
+      schema:
+        type: string
+        enum: [spotify]
 
   headers:
     CorrelationId:
@@ -172,6 +193,15 @@ components:
       description: Echoed from the X-Experiment-Id request header, if present.
       schema:
         type: string
+    ArbitraryMock:
+      description: |
+        Reflects which external dependencies were mocked for this response.
+        'weather': OWM was mocked (active at startup when OPENWEATHERMAP_API_KEY is absent).
+        'spotify': Spotify was mocked for this request (caller sent X-ARBITRARY-MOCK: spotify).
+        'weather,spotify': both were mocked.
+      schema:
+        type: string
+        example: weather
     ApiSource:
       description: Present on passthrough error responses. Value is GO-API-PASSTHROUGH when the error originated in the playlist-engine.
       schema:

@@ -11,6 +11,7 @@ spec — not the other way around.
 |------|---------|-----------------|
 | `public-api.yaml` | `WeatherPlaylist.Api` (.NET) | `cgr.dev/chainguard/dotnet-runtime` |
 | `playlist-engine.yaml` | `playlist-engine` (Go) | `cgr.dev/chainguard/go` |
+| `mock-services.md` | `mock-spotify` + `mock-owm` (Go) | n/a — local HTTPS mocks, not under CVE test |
 
 ### Call flow
 
@@ -55,13 +56,32 @@ These headers flow through every request and response in the system.
   .NET-origin failures without parsing the body.
 
 ### X-ARBITRARY-MOCK
-- **Origin:** Set by the .NET service when `OPENWEATHERMAP_API_KEY` is absent at startup.
-- **Value:** `weather`
-- **When:** Present on every response (including errors) for the lifetime of the process
-  when the mock weather service is active. Absent when a real API key is configured.
-- **Purpose:** Signals to callers, k6 scripts, and monitoring that weather data in the
-  response is synthetic. Any stress run with this header present should be treated as a
-  functional smoke test only — not a valid CVE surface measurement.
+
+This header has two distinct roles depending on direction.
+
+#### On requests (caller → .NET → Go): mock control
+
+| Value | Effect |
+|-------|--------|
+| `spotify` | Go service routes Spotify API calls for this request to `SPOTIFY_MOCK_BASE_URL`. The HTTPS chain is preserved — TLS CVE surface still fires. Has no effect if `SPOTIFY_MOCK_BASE_URL` is not set (safety gate). |
+
+Set by k6 or any client. The .NET service passes it through to the Go service unchanged.
+
+#### On responses (service → caller): mock status
+
+| Value | Meaning |
+|-------|---------|
+| `weather` | OWM was mocked (active for all responses when `OPENWEATHERMAP_API_KEY` is absent at startup) |
+| `spotify` | Spotify was mocked for this request |
+| `weather,spotify` | Both were mocked |
+
+Set by the .NET service to aggregate the mock state for the full request chain.
+
+**CVE validity rule:** Any response that carries `X-ARBITRARY-MOCK` on the response
+(in any value) indicates a dependency was short-circuited without a live TLS connection.
+k6 must assert this header is absent for any result to count as a valid CVE surface
+measurement — unless using dedicated external mock servers (see `specs/mock-services.md`),
+which preserve the HTTPS chain.
 
 ---
 
@@ -128,3 +148,4 @@ See [`experiments/`](experiments/) for the manifest format and index.
 | Q3 | Always create new playlist — no caching | Caching would suppress Spotify HTTP calls under load, defeating the CVE surface exercise |
 | Q4 | UI endpoint not in spec | Static HTML is an implementation detail; `GET /` does not belong in a machine-readable API contract |
 | Q5 | Mock weather fallback + `X-ARBITRARY-MOCK` header | OWM registration blocked on DNS; mock keeps the system runnable for development and smoke testing without real credentials. Header makes mock mode unambiguous to all consumers. |
+| Q6 | Dedicated mock servers (`mock-spotify`, `mock-owm`) + per-request `X-ARBITRARY-MOCK: spotify` header routing | Spotify rate limits are the dominant bottleneck for high-VU stress runs. In-process mocks bypass TLS entirely, invalidating CVE measurements. Dedicated HTTPS mock servers with a local CA preserve the full TLS handshake while removing external rate limits and credential requirements. See `specs/mock-services.md`. |
