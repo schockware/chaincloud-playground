@@ -29,6 +29,7 @@ be stood up for them.
 
 | CVE | Package | Reason deferred |
 |-----|---------|----------------|
+| CVE-2023-0286 | openssl | X.400/CRL type confusion — requires `X509_V_FLAG_CRL_CHECK` explicitly enabled + mock PKI with X.400 CRL distribution points; off by default in .NET HttpClient and Go net/http. Needs controlled TLS terminator + malicious cert chain. Phase 2 setup: mock CA + custom CRL server. |
 | CVE-2023-4911 | glibc | "Looney Tunables" — requires LD_PRELOAD privilege escalation scenario |
 | CVE-2023-4039 | libgcc / libstdc++ | Stack protection bypass — requires controlled binary execution environment |
 | CVE-2023-6246 | glibc | syslog heap overflow — requires specific process communication setup |
@@ -44,6 +45,7 @@ be stood up for them.
 
 **What Phase 2 will need:**
 - A dedicated host environment (VM or bare metal) with configurable kernel settings
+- Mock CA + CRL server for CVE-2023-0286 (X.400 cert chain + malicious CRL delivery)
 - Possibly a second Podman host to simulate container escape / lateral movement
 - Scripted exploit harness separate from the k6 stress test
 

@@ -81,3 +81,23 @@
 **Rationale accepted:** Tighter spec = cleaner implementation. Correlation ID spanning both services enables cross-service log tracing without external tooling. Experiment manifests create a durable, repo-auditable link between stress test runs and the specific CVEs being tested.
 
 ---
+
+## 18:47 — CVE-2023-0286 Phase 2 placement and EXP-001 CVE bundle accepted
+
+**Context:** After deep-diving CVE-2023-0286 (X.400/CRL type confusion), user confirmed it looks like a cert DDoS vector. Needed a decision on Phase 2 vs Phase 1 placement, and which CVEs to bundle into EXP-001.
+
+**Options presented:**
+1. CVE-2023-0286: Phase 1 — configure CRL checking explicitly and build mock PKI to exercise it
+2. CVE-2023-0286: Phase 2 — defer; requires mock CA + CRL server, controlled PKI environment
+3. EXP-001: CVE-2024-5535 alone (CRITICAL, highest severity first)
+4. EXP-001: CVE-2024-5535 + CVE-2022-3602 + CVE-2022-3786 bundled (all fire on TLS handshake, same k6 scenario)
+5. EXP-001: CVE-2026-21218 (.NET spoofing — different impact class, separate experiment)
+
+**Chosen:**
+- CVE-2023-0286: Option 2 — Phase 2 with mock CA + CRL server infrastructure noted
+- EXP-001: Option 4 — TLS handshake bundle (CVE-2024-5535 + CVE-2022-3602 + CVE-2022-3786)
+- CVE-2026-21218 implicitly deferred to EXP-002 (different impact class: I:H vs A:H)
+
+**Rationale accepted:** CVE-2023-0286 cannot fire without explicit CRL flag and controlled PKI — wrong fit for Phase 1's "fires naturally over HTTP" criterion. Bundling the three TLS handshake CVEs into EXP-001 maximises coverage per k6 run since they share the same trigger.
+
+---

@@ -10,7 +10,7 @@ API request and the `X-Experiment-Id` header on every response.
 
 | ID | CVE(s) targeted | Image variant | Status |
 |----|----------------|---------------|--------|
-| _(pending — add as CVEs are selected)_ | | | |
+| [EXP-001](EXP-001.md) | CVE-2024-5535 (CRITICAL), CVE-2022-3602 (HIGH), CVE-2022-3786 (HIGH) | Chainguard dotnet-runtime + Go vs. MCR + golang:latest | Manifest ready — awaiting implementation |
 
 ---
 
