@@ -54,6 +54,15 @@ These headers flow through every request and response in the system.
 - **Purpose:** Lets consumers and monitoring distinguish Go-origin failures from
   .NET-origin failures without parsing the body.
 
+### X-ARBITRARY-MOCK
+- **Origin:** Set by the .NET service when `OPENWEATHERMAP_API_KEY` is absent at startup.
+- **Value:** `weather`
+- **When:** Present on every response (including errors) for the lifetime of the process
+  when the mock weather service is active. Absent when a real API key is configured.
+- **Purpose:** Signals to callers, k6 scripts, and monitoring that weather data in the
+  response is synthetic. Any stress run with this header present should be treated as a
+  functional smoke test only — not a valid CVE surface measurement.
+
 ---
 
 ## Stress Test Targets
@@ -79,6 +88,9 @@ Rationale: eliminates OAuth redirect complexity; keeps the HTTP client path — 
 CVE surface — as the only variable under stress.
 
 **OpenWeatherMap:** API key in `OPENWEATHERMAP_API_KEY` env var, sent as a query param.
+If the key is absent, the service falls back to `MockWeatherService` — a static set of 7
+conditions selected deterministically by lat/lon + UTC hour. All responses in mock mode
+carry `X-ARBITRARY-MOCK: weather`.
 
 ---
 
@@ -115,3 +127,4 @@ See [`experiments/`](experiments/) for the manifest format and index.
 | Q2 | Error passthrough with `X-Api-Source: GO-API-PASSTHROUGH` + `X-Correlation-Id` | Preserves signal for k6 (429 stays 429); correlation ID enables cross-service log tracing |
 | Q3 | Always create new playlist — no caching | Caching would suppress Spotify HTTP calls under load, defeating the CVE surface exercise |
 | Q4 | UI endpoint not in spec | Static HTML is an implementation detail; `GET /` does not belong in a machine-readable API contract |
+| Q5 | Mock weather fallback + `X-ARBITRARY-MOCK` header | OWM registration blocked on DNS; mock keeps the system runnable for development and smoke testing without real credentials. Header makes mock mode unambiguous to all consumers. |

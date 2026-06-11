@@ -75,6 +75,9 @@ func (c *Client) Token(ctx context.Context) (string, error) {
 
 	c.accessToken = tr.AccessToken
 	c.tokenExpiresAt = time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second)
+	if tr.RefreshToken != "" {
+		c.refreshToken = tr.RefreshToken
+	}
 	return c.accessToken, nil
 }
 

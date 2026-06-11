@@ -10,31 +10,30 @@ public static class HealthEndpoints
     }
 
     private static async Task<IResult> HandleAsync(
-        WeatherService weatherService,
+        IWeatherService weatherService,
         PlaylistEngineClient engineClient,
-        IConfiguration config,
         CancellationToken ct)
     {
         string owmStatus;
-        try
+        if (weatherService.IsMock)
         {
-            if (string.IsNullOrEmpty(config["OPENWEATHERMAP_API_KEY"]))
-            {
-                owmStatus = "unreachable";
-            }
-            else
+            owmStatus = "mock";
+        }
+        else
+        {
+            try
             {
                 await weatherService.GetCurrentAsync(51.5074, -0.1278, ct);
                 owmStatus = "ok";
             }
-        }
-        catch
-        {
-            owmStatus = "unreachable";
+            catch
+            {
+                owmStatus = "unreachable";
+            }
         }
 
         var engineStatus = await engineClient.IsHealthyAsync(ct) ? "ok" : "unreachable";
-        var overall = owmStatus == "ok" && engineStatus == "ok" ? "ok" : "degraded";
+        var overall = owmStatus is "ok" or "mock" && engineStatus == "ok" ? "ok" : "degraded";
 
         return Results.Ok(new HealthResponse(overall, owmStatus, engineStatus));
     }

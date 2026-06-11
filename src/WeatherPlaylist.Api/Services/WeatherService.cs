@@ -3,9 +3,11 @@ using System.Text.Json.Serialization;
 
 namespace WeatherPlaylist.Api.Services;
 
-public class WeatherService(IHttpClientFactory httpClientFactory, IConfiguration config)
+public class WeatherService(IHttpClientFactory httpClientFactory, IConfiguration config) : IWeatherService
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
+
+    public bool IsMock => false;
 
     public async Task<WeatherCondition> GetCurrentAsync(double lat, double lon, CancellationToken ct = default)
     {

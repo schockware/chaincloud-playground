@@ -12,7 +12,7 @@ public static class WeatherEndpoints
     private static async Task<IResult> HandleAsync(
         double lat,
         double lon,
-        WeatherService weatherService,
+        IWeatherService weatherService,
         HttpContext ctx,
         CancellationToken ct)
     {

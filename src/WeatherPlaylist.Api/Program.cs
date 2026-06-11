@@ -17,7 +17,14 @@ builder.Services.AddHttpClient("openweathermap",
 builder.Services.AddHttpClient("playlist-engine",
     client => client.BaseAddress = new Uri("http://playlist-engine"));
 
-builder.Services.AddScoped<WeatherService>();
+var owmApiKey = builder.Configuration["OPENWEATHERMAP_API_KEY"];
+var useMockWeather = string.IsNullOrWhiteSpace(owmApiKey);
+
+if (useMockWeather)
+    builder.Services.AddScoped<IWeatherService, MockWeatherService>();
+else
+    builder.Services.AddScoped<IWeatherService, WeatherService>();
+
 builder.Services.AddScoped<PlaylistEngineClient>();
 
 var app = builder.Build();
@@ -47,6 +54,8 @@ app.Use(async (ctx, next) =>
         ctx.Response.Headers["X-Correlation-Id"] = correlationId;
         if (!string.IsNullOrEmpty(experimentId))
             ctx.Response.Headers["X-Experiment-Id"] = experimentId;
+        if (useMockWeather)
+            ctx.Response.Headers["X-ARBITRARY-MOCK"] = "weather";
         return Task.CompletedTask;
     });
 

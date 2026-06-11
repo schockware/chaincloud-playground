@@ -5,9 +5,9 @@ var spotifyClientId = builder.AddParameter("SpotifyClientId", secret: true);
 var spotifyClientSecret = builder.AddParameter("SpotifyClientSecret", secret: true);
 var spotifyRefreshToken = builder.AddParameter("SpotifyRefreshToken", secret: true);
 
-// Build playlist-engine with Chainguard base (default) or swap tag for standard-image experiments.
-// Before first run: podman build -t playlist-engine:local ./src/playlist-engine
-var playlistEngine = builder.AddContainer("playlist-engine", "playlist-engine", "local")
+// Builds from ./src/playlist-engine/Dockerfile on every run via the Podman socket.
+// For CVE experiment runs with a pre-built image, swap to AddContainer("playlist-engine", "playlist-engine", "chainguard").
+var playlistEngine = builder.AddDockerfile("playlist-engine", "../playlist-engine")
     .WithHttpEndpoint(targetPort: 5100, name: "http")
     .WithEnvironment("SPOTIFY_CLIENT_ID", spotifyClientId)
     .WithEnvironment("SPOTIFY_CLIENT_SECRET", spotifyClientSecret)

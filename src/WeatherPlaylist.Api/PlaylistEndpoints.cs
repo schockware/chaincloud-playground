@@ -18,7 +18,7 @@ public static class PlaylistEndpoints
 
     private static async Task HandleGenerateAsync(
         GeneratePlaylistRequest req,
-        WeatherService weatherService,
+        IWeatherService weatherService,
         PlaylistEngineClient engineClient,
         HttpContext ctx,
         CancellationToken ct)
