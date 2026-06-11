@@ -23,13 +23,17 @@ containers/
 
 ```powershell
 # Chainguard variant
-podman build -f containers/dotnet-runtime.chainguard.Dockerfile -t weather-api:chainguard src/WeatherPlaylist.Api
+podman build -f containers/dotnet-runtime.chainguard.Dockerfile -t weather-api:chainguard src/
 podman build -f containers/go.chainguard.Dockerfile             -t playlist-engine:chainguard src/playlist-engine
 
 # Standard variant
-podman build -f containers/dotnet-runtime.standard.Dockerfile   -t weather-api:standard src/WeatherPlaylist.Api
+podman build -f containers/dotnet-runtime.standard.Dockerfile   -t weather-api:standard src/
 podman build -f containers/go.standard.Dockerfile               -t playlist-engine:standard src/playlist-engine
 ```
+
+> **.NET context is `src/`** (not `src/WeatherPlaylist.Api`) because the API project
+> references `WeatherPlaylist.ServiceDefaults` via a relative `../` path that must be
+> inside the build context.
 
 ### Running a variant
 
